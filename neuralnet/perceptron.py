@@ -14,7 +14,7 @@ class Perceptron:
         done = False
         seasons = 0
 
-        self.weights = np.random.rand(3) # 2 dimensions and threshold
+        self.weights = np.random.rand(3)
         on_adjust(self.weights)
 
         while not done and seasons < max_seasons:
