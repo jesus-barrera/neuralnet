@@ -1,8 +1,12 @@
 import numpy as np
 
 class Adaline:
-    def __init__(self):
-        self.weights = None
+    def __init__(self, input_size):
+        self._input_size = input_size
+        self._weights = None
+
+        self._inputs = np.zeros(input_size + 1) # constant threshold input
+        self._inputs[0] = -1
 
     def train(
             self,
@@ -13,21 +17,24 @@ class Adaline:
             update_line,
             update_error):
 
-        epochs = 0
+        self._weights = 2 * np.random.rand(self._input_size + 1) - 1
 
-        self.weights = np.random.rand(3)
-        update_line(self.weights)
+        update_line(self._weights)
+
+        epochs = 0
 
         while epochs < max_epochs:
             total_error = 0
 
             for inputs, desired in training_set:
-                output = self.sigmoid(np.dot(inputs, self.weights))
+                self._inputs[1:] = inputs
+
+                output = self._sigmoid(np.dot(self._inputs, self._weights))
                 derivative = output * (1 - output)
                 error = desired - output
 
-                self.weights += learning_rate * error * derivative * inputs
-                update_line(self.weights)
+                self._weights += learning_rate * error  * self._inputs
+                update_line(self._weights)
 
                 total_error += error**2
 
@@ -44,11 +51,13 @@ class Adaline:
 
         return converged, epochs
 
-    def sigmoid(self, value):
+    def _sigmoid(self, value):
         return 1 / (1 + np.exp(-value))
 
     def test(self, inputs):
-        if np.dot(inputs, self.weights) >= 0:
+        self._inputs[1:] = inputs
+
+        if np.dot(self._inputs, self._weights) >= 0:
             return 1
         else:
             return 0

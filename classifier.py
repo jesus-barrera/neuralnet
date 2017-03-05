@@ -13,7 +13,7 @@ class Classifier:
         self.max_epochs = 100
         self.min_error = 0.01
         self.training_set = []
-        self.perceptron = Adaline()
+        self.perceptron = Adaline(2) # two dimensional adaline
 
         self.figure = plt.figure()
 
@@ -129,7 +129,7 @@ class Classifier:
             y = event.ydata
 
             # add new training pair; threshold is considered an input thus x0 = -1
-            inputs = np.array([-1, x, y])
+            inputs = np.array([x, y])
             self.training_set.append((inputs, output))
 
             # plot new point
@@ -173,7 +173,7 @@ class Classifier:
         x = self.x_slider.val
         y = self.y_slider.val
 
-        inputs = np.array([-1, x, y])
+        inputs = np.array([x, y])
         output = self.perceptron.test(inputs)
 
         print 'Probar ({}, {}): {}'.format(x, y, output)
@@ -221,4 +221,3 @@ if __name__ == '__main__':
     c = Classifier()
 
     plt.show()
-	
