@@ -1,223 +1,102 @@
  # -*- coding: utf-8 -*-
-
-import matplotlib.pyplot as plt
+import time
 import numpy as np
-from matplotlib.widgets import Button, Slider
+from gi.repository import Gtk
+from neuralnet.mlp import MultiLayerPerceptron as MLP
+from plot import Plotter
 
-from neuralnet.adaline import Adaline
+UI_FILE = 'ui.glade'
 
 class Classifier:
     def __init__(self):
-        # perceptron parameters
-        self.learning_rate = 1
-        self.max_epochs = 100
-        self.min_error = 0.01
-        self.training_set = []
-        self.perceptron = Adaline(2) # two dimensional adaline
+        self.mlp = None
+        self.plotter = Plotter()
 
-        self.figure = plt.figure()
+        # build UI
+        self.builder = Gtk.Builder()
+        self.builder.add_from_file(UI_FILE)
+        self.builder.connect_signals(self)
 
-        # create axes
-        self.space_axes = self.init_space_axes()
-        self.error_axes = self.init_error_axes()
+        container = self.builder.get_object('figure_container')
+        container.add(self.plotter.canvas)
 
-        # add plots
-        self.error_line, = self.error_axes.plot([0], [0], 'g-')
-        self.separating_line, = self.space_axes.plot([0], [0], 'b-')
+        # save object references
+        self.main_window = self.builder.get_object('main_window')
+        self.progressbar = self.builder.get_object('progressbar')
+        self.learning_rate_spin = self.builder.get_object('learning_rate_spin')
+        self.error_goal_spin = self.builder.get_object('error_goal_spin')
+        self.max_epochs_spin = self.builder.get_object('max_epochs_spin')
+        self.hidden_layers_entry = self.builder.get_object('hidden_layers_entry')
+        self.x_spin = self.builder.get_object('x_spin')
+        self.y_spin = self.builder.get_object('y_spin')
 
-        # canvas properties
-        self.figure.canvas.set_window_title(u'Perceptrón')
-        self.figure.canvas.mpl_connect('button_press_event', self.on_press)
+    def show(self):
+        self.main_window.show_all()
+        Gtk.main()
 
-        self.set_gui()
+    # --------------
+    # Event handlers
+    # --------------
+    def on_main_window_delete_event(self, *args):
+        Gtk.main_quit(*args)
 
-    def init_space_axes(self):
-        axes = self.figure.add_axes([0.05, 0.2, 0.4, 0.75])
+    def on_train_button_clicked(self, button):
+        self.max_epochs = self.max_epochs_spin.get_value_as_int()
 
-        axes.set_xlabel('x')
-        axes.set_ylabel('y')
+        self.plotter.clear_error()
+        self.plotter.clear_separating_surface()
+        self.plotter.error_axes.set_xlim(0, self.max_epochs)
 
-        axes.set_xlim(-10, 10)
-        axes.set_ylim(-10, 10)
+        self.mlp = self.create_mlp()
 
-        return axes
-
-
-    def init_error_axes(self):
-        axes = self.figure.add_axes([0.5, 0.65, 0.3, 0.30])
-
-        axes.set_xlabel(u'Época')
-        axes.set_ylabel('Error')
-
-        # x lim is set dynamically according to max_epochs
-        axes.set_ylim(0, 1)
-
-        return axes
-
-
-    def set_gui(self):
-        # train button
-        ax = self.figure.add_axes([0.85, 0.825, 0.1, 0.075])
-        self.train_btn = Button(ax, 'Entrenar')
-        self.train_btn.on_clicked(self.train_perceptron)
-
-        # reset button
-        ax = self.figure.add_axes([0.85, 0.7, 0.1, 0.075])
-        self.reset_btn = Button(ax, 'Reiniciar')
-        self.reset_btn.on_clicked(self.reset)
-
-        # learning rate slider
-        self.learning_slider = Slider(
-                plt.axes([0.12, 0.11, 0.3, 0.03]),
-                u'Razón aprendizaje',
-                0.1, 2,
-                valinit=self.learning_rate)
-
-        self.learning_slider.on_changed(self.update_learning_rate)
-
-        # max epochs slider
-        self.epochs_slider = Slider(
-                plt.axes([0.12, 0.07, 0.3, 0.03]),
-                u'Máx. épocas',
-                10, 500,
-                valinit=self.max_epochs,
-                valfmt='%d')
-
-        self.epochs_slider.on_changed(self.update_max_epochs)
-
-        # min error slider
-        self.error_slider = Slider(
-                plt.axes([0.12, 0.03, 0.3, 0.03]),
-                u'Error Mín.',
-                0, 1,
-                valinit=self.min_error)
-
-        self.error_slider.on_changed(self.update_min_error)
-
-        # test x slider
-        self.x_slider = Slider(
-                plt.axes([0.5, 0.07, 0.3, 0.03]),
-                u'x',
-                -10, 10,
-                valinit=0)
-
-        # y slider
-        self.y_slider = Slider(
-                plt.axes([0.5, 0.03, 0.3, 0.03]),
-                u'y',
-                -10, 10,
-                valinit=0)
-
-        # test button
-        ax = self.figure.add_axes([0.85, 0.03, 0.1, 0.075])
-        self.test_btn = Button(ax, 'Probar')
-        self.test_btn.on_clicked(self.test)
-
-        # important! set current axes
-        plt.sca(self.space_axes)
-
-    def on_press(self, event):
-        if event.xdata and event.inaxes == self.space_axes:
-            if event.button is 1: # left button
-                output = 1
-            elif event.button is 3: # right button
-                output = 0
-            else:
-                return
-
-            x = event.xdata
-            y = event.ydata
-
-            # add new training pair; threshold is considered an input thus x0 = -1
-            inputs = np.array([x, y])
-            self.training_set.append((inputs, output))
-
-            # plot new point
-            self.plot_point(x, y, output)
-
-
-    def update_learning_rate(self, rate):
-        self.learning_rate = rate
-
-    def update_max_epochs(self, num):
-        self.max_epochs = int(num)
-
-    def update_min_error(self, error):
-        self.min_error = error
-
-    def reset(self, event):
-        self.training_set = []
-        self.separating_line.set_data([0], [0])
-        self.error_line.set_data([0], [0])
-        self.space_axes.lines = [self.separating_line]
-
-        self.figure.canvas.draw()
-
-    def train_perceptron(self, event):
-        self.before_training()
-
-        converged, seasons = self.perceptron.train(
-                self.training_set,
-                self.learning_rate,
+        converged, epochs = self.mlp.train(
+                self.plotter.training_set,
+                self.learning_rate_spin.get_value(),
                 self.max_epochs,
-                self.min_error,
-                self.update_separating_line,
-                self.update_error_line)
+                self.error_goal_spin.get_value(),
+                self.update)
 
         if not converged:
             print u'El perceptrón no convergió!'
         else:
-            print u'El perceptrón convergió en {} épocas'.format(seasons)
+            print u'El perceptrón convergió en {} épocas'.format(epochs)
 
-    def test(self, event):
-        x = self.x_slider.val
-        y = self.y_slider.val
+        self.plotter.plot_separating_surface(self.mlp)
+
+    def on_test_button_clicked(self, button):
+        x = self.x_spin.get_value()
+        y = self.y_spin.get_value()
 
         inputs = np.array([x, y])
-        output = self.perceptron.test(inputs)
+        output, = self.mlp.test(inputs)
 
-        print 'Probar ({}, {}): {}'.format(x, y, output)
+        self.plotter.plot_point(x, y, output)
 
-        self.plot_point(x, y, output)
+    def on_restart_button_clicked(self, button):
+        self.mlp = None
+        self.update_progressbar(0)
+        self.plotter.clear()
 
-    def plot_point(self, x, y, group):
-        if group is 1:
-            fmt = 'go'
-        else:
-            fmt = 'r^'
+    def create_mlp(self):
+        hidden_layers = self.hidden_layers_entry.get_text()
+        hidden_layers = map(int, hidden_layers.split(','))
 
-        line, = self.space_axes.plot([x], [y], fmt)
-        line.figure.canvas.draw()
+        shape = [2] + hidden_layers + [1] # two inputs / one output
 
+        return MLP(shape)
 
-    def before_training(self):
-        # reset error plot
-        self.error_line.set_data([0], [0])
-        self.error_axes.set_xlim(0, self.max_epochs)
+    def update(self, epoch, error):
+        self.plotter.update_error_line(error)
+        self.update_progressbar(epoch)
 
-        self.figure.canvas.draw()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
-    def update_separating_line(self, weights):
-        w0, w1, w2 = weights
+    def update_progressbar(self, epoch):
+        fraction = float(epoch) / self.max_epochs
 
-        x = np.array([-10, 10])
-        y = (-w1 * x + w0) / w2
-
-        self.separating_line.set_data(x, y)
-        self.figure.canvas.draw()
-
-    def update_error_line(self, error):
-        # add new error
-        y = self.error_line.get_ydata()
-        y = np.append(y, error)
-
-        x = np.arange(y.size)
-
-        # update line
-        self.error_line.set_data(x, y)
-        self.figure.canvas.draw()
+        self.progressbar.set_fraction(fraction)
+        self.progressbar.set_text(u'Época: {}'.format(epoch))
 
 if __name__ == '__main__':
-    c = Classifier()
-
-    plt.show()
+    Classifier().show()
