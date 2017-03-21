@@ -9,6 +9,8 @@ import numpy as np
 class Plotter():
     def __init__(self):
         self.training_set = []
+        self.training_points = []
+        self.test_points = []
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
 
@@ -42,7 +44,6 @@ class Plotter():
         axes.set_xlabel(u'Época')
         axes.set_ylabel('Error')
 
-        # x lim is set dynamically according to max_epochs
         axes.set_ylim(0, 0.5)
         axes.set_xlim(0, 100)
 
@@ -68,19 +69,31 @@ class Plotter():
 
             self.training_set.append((inputs, output))
 
-    def plot_point(self, x, y, group):
+    def plot_point(self, x, y, group, is_test=False):
         if group == 1:
-            fmt = 'go'
+            props = {'color': 'g', 'marker': 'o', 'markersize': 8}
         else:
-            fmt = 'r^'
+            props = {'color': 'r', 'marker': '^', 'markersize': 8}
 
-        self.space_axes.plot([x], [y], fmt)
+        if is_test:
+            props['markeredgewidth'] = 0.5
+            props['markeredgecolor'] = 'w'
+
+        line, = self.space_axes.plot([x], [y], **props)
+
         self.canvas.draw()
 
-    def plot_separating_surface(self, mlp):
-        x, y = np.mgrid[-10:10:100j, -10:10:100j]
+        return line
 
-        space = np.linspace(-10, 10, 100)
+    def plot_separating_surface(self, mlp, mesh_size=30):
+        self.clear_separating_surface() # remove previous surface
+
+        step = complex(0, mesh_size)
+
+        # TODO: do not hardcode grid dimensions
+        x, y = np.mgrid[-10:10:step, -10:10:step]
+
+        space = np.linspace(-10, 10, mesh_size)
 
         colors = []
 
@@ -92,15 +105,13 @@ class Plotter():
 
                 colors.append(result)
 
-        colors = np.array(colors).reshape((100, 100))
+        colors = np.array(colors).reshape((mesh_size, mesh_size))
 
-        self.space_axes.pcolormesh(
+        self.separating_surface = self.space_axes.pcolormesh(
                 x, y, colors,
                 cmap='RdYlGn',
                 vmin=0,
                 vmax=1)
-
-        self.canvas.draw()
 
     def update_error_line(self, error):
         # add new error
@@ -111,7 +122,6 @@ class Plotter():
 
         # update line
         self.error_line.set_data(x, y)
-        self.canvas.draw()
 
     def clear(self):
         self.clear_error()
@@ -128,4 +138,6 @@ class Plotter():
         self.space_axes.lines = []
 
     def clear_separating_surface(self):
-        self.space_axes.collections = []
+        if self.separating_surface:
+            self.space_axes.collections.remove(self.separating_surface)
+            self.separating_surface = None
