@@ -3,9 +3,9 @@ import time
 import numpy as np
 from gi.repository import Gtk
 from neuralnet.mlp import MultiLayerPerceptron as MLP
-from plot import Plotter
+from plotting.mlp import Plotter
 
-UI_FILE = 'ui.glade'
+UI_FILE = 'ui/mlp.glade'
 
 class Classifier:
     def __init__(self):
